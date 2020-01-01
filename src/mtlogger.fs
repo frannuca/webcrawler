@@ -31,22 +31,24 @@ module MTLogger=
         |> Seq.fold(fun a b -> a + b) ""
 
     type LogMessage=
-        |WriteMsg of string
-        |PlotProgress of string
+        |DumpMsg of string
+        |LogMsg of string
         |Stop 
 
-    type ActorLogger(path:string)=
-        let file = new System.IO.StreamWriter(path)
+    type ActorLogger(path2dump:string,logfile:string)=
+        let file2dump = new System.IO.StreamWriter(path2dump)
+        let file2log  = new System.IO.StreamWriter(logfile)
 
         let  _mailbox =
             MailboxProcessor.Start(fun inbox ->
                 let rec loop() = async { 
                             let! msg = inbox.Receive()
                             match msg with
-                            |WriteMsg(msg) -> file.WriteLine(msg)
-                                              return! loop()
-                            |PlotProgress(p) ->
-                                              printfn "%s" p
+                            |DumpMsg(msg) -> file2dump.WriteLine(msg)
+                                             return! loop()
+                            |LogMsg(p) ->
+                                              printf "%s" p
+                                              file2log.WriteLine(p)
                                               return! loop()
                                               
                             |Stop -> printfn "Leaving mailbox"
@@ -58,10 +60,11 @@ module MTLogger=
         interface System.IDisposable with
             override self.Dispose()=
                 Stop |> _mailbox.Post
-                file.Close()
+                file2dump.Close()
+                file2log.Close()
 
-        member self.ProcessLogMessage(msg:string)=
-             WriteMsg(msg) |> _mailbox.Post
+        member self.Print2Dump(msg:string)=
+             DumpMsg(msg) |> _mailbox.Post
 
-        member self.ReportProgress(p:string)=
-             PlotProgress(p) |> _mailbox.Post
+        member self.Print2Log(p:string)=
+             LogMsg(p) |> _mailbox.Post

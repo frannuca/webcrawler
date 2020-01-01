@@ -13,11 +13,11 @@ open System.Web
 module Craw=
     open Hierarchy
 
-    type Crawler(maxdepth:int,quorumCard:int,logfile:string) =
-        let logger = new MTLogger.ActorLogger(logfile)
+    type Crawler(maxdepth:int,quorumCard:int,stopWordsFile:string,logfile:string,dumpfile:string) =
+        let logger = new MTLogger.ActorLogger(dumpfile,logfile)
         let tokenize(txt:string)=
             let tokens = Regex.Split(txt.ToLower(), "(?:(?<=^|[^a-zA-Z])'|'(?=[^a-zA-Z]|$)|[^a-zA-Z'])+")
-            let stopwords = (File.ReadAllText("/Users/fran/code/kafka/kafka_producer/webCrawler/resources/stopwords_en.txt")).Split(',')
+            let stopwords = (File.ReadAllText(stopWordsFile)).Split(',')
                             |> Array.map(fun x -> x.Trim().ToLower()) |> Set.ofArray
 
             let words =          
@@ -90,10 +90,10 @@ module Craw=
         let getNode(parent:string option)(depth:int,tokens:string list,exceptions:string list )(url:string)= async{
             //printfn "fetching %s with level %i" url depth
             let! doc = fetch url
-            doc |> Option.map(fun _ ->  sprintf "%i%s%s" (depth)(String.replicate depth "\t" )(url) |> logger.ReportProgress) |> ignore
+            doc |> Option.map(fun _ ->  sprintf "%i%s%s" (depth)(String.replicate depth "\t" )(url) |> logger.Print2Log) |> ignore
 
 
-            MTLogger.GetHTMLString([doc]) |> logger.ProcessLogMessage
+            MTLogger.GetHTMLString([doc]) |> logger.Print2Dump
 
             if depth<=maxdepth then
                 let links = doc |> Option.map(extractLinks(tokens)(exceptions)) |> Option.defaultValue []
@@ -111,7 +111,7 @@ module Craw=
             let treeroot = new TreeNode(xnode.url,xnode.data)
             let mainhtml = treeroot.Serialize2String()
             let tokens = tokenize mainhtml |> Seq.take(quorumCard) |> Seq.map(fun a -> a.Key) |> List.ofSeq
-            String.Join(",",tokens |> Array.ofSeq) |> logger.ReportProgress
+            String.Join(",",tokens |> Array.ofSeq) |> logger.Print2Log
             Console.ReadLine() |> ignore
             queueurl.Enqueue(xnode)
             let visited = new System.Collections.Concurrent.ConcurrentDictionary<string,Node>()
